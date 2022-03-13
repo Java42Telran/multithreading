@@ -22,6 +22,6 @@ public void run() {
 		}
 		System.out.println(runnerId);
 	}
-	race.setWinner(runnerId);
+	race.winner.compareAndSet(-1, runnerId);
 }
 }
