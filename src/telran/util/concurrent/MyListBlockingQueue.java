@@ -1,50 +1,90 @@
 package telran.util.concurrent;
 
-import java.util.Collection;
-import java.util.Iterator;
+import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.*;
 
 public class MyListBlockingQueue<E> implements BlockingQueue<E> {
-	//TODO fields of the class
-	public MyListBlockingQueue(int limit) {
-		//TODO
+	
+	private Lock monitor = new ReentrantLock();
+	private Condition consumerWaitingCondition = monitor.newCondition();
+	private Condition producerWaitingCondition = monitor.newCondition();
+	private LinkedList<E> queue = new LinkedList<>();
+	private int capacityLimit;
+
+	public MyListBlockingQueue(int capacityLimit) {
+		this.capacityLimit = capacityLimit;
 	}
+
+	
 
 	@Override
 	public E remove() {
-		// TODO 
-		return null;
+
+		try {
+			monitor.lock();
+			E result = queue.remove();
+			producerWaitingCondition.signal();
+			return result;
+		} finally {
+			monitor.unlock();
+		}
 	}
 
 	@Override
 	public E poll() {
-		// TODO 
-		return null;
+		try {
+			monitor.lock();
+			E result = queue.poll();
+			if (result != null) {
+				producerWaitingCondition.signal();
+			}
+			return result;
+		} finally {
+			monitor.unlock();
+		}
 	}
 
 	@Override
 	public E element() {
-		// TODO 
-		return null;
+		try {
+			monitor.lock();
+			return queue.element();
+		} finally {
+			monitor.unlock();
+		}
 	}
 
 	@Override
 	public E peek() {
-		// TODO 
-		return null;
+		try {
+			monitor.lock();
+			return queue.peek();
+		} finally {
+			monitor.unlock();
+		}
 	}
 
 	@Override
 	public int size() {
-		// TODO 
-		return 0;
+		try {
+			monitor.lock();
+
+			return queue.size();
+		} finally {
+			monitor.unlock();
+		}
 	}
 
 	@Override
 	public boolean isEmpty() {
-		// TODO 
-		return false;
+		try {
+			monitor.lock();
+			return queue.isEmpty();
+		} finally {
+			monitor.unlock();
+		}
 	}
 
 	@Override
@@ -91,61 +131,137 @@ public class MyListBlockingQueue<E> implements BlockingQueue<E> {
 
 	@Override
 	public void clear() {
-		// TODO 
+		monitor.lock();
+		try {
+			queue.clear();
+			producerWaitingCondition.signal();
+		} finally {
+			monitor.unlock();
+		}
 
 	}
 
 	@Override
 	public boolean add(E e) {
-		// TODO 
-		return false;
+		try {
+			monitor.lock();
+			boolean res = queue.add(e);
+			consumerWaitingCondition.signal();
+			return res;
+		} finally {
+			monitor.unlock();
+		}
 	}
 
 	@Override
 	public boolean offer(E e) {
-		// TODO 
-		return false;
+		try {
+			monitor.lock();
+			boolean res = queue.offer(e);
+			if (res) {
+				consumerWaitingCondition.signal();
+			}
+			return res;
+		} finally {
+			monitor.unlock();
+		}
 	}
 
 	@Override
 	public void put(E e) throws InterruptedException {
-		// TODO 
+		try {
+			monitor.lock();
+			while (queue.size() == capacityLimit) {
+				producerWaitingCondition.await();
+			}
+			queue.add(e);
+			consumerWaitingCondition.signal();
+			
+		} finally {
+			monitor.unlock();
+		}
 
 	}
 
 	@Override
 	public boolean offer(E e, long timeout, TimeUnit unit) throws InterruptedException {
-		// TODO 
-		return false;
+		try {
+			monitor.lock();
+			while (queue.size() == capacityLimit) {
+				if(!producerWaitingCondition.await(timeout, unit)) {
+					return false;
+				}
+			}
+			queue.add(e);
+			consumerWaitingCondition.signal();
+			return true;
+			
+		} finally {
+			monitor.unlock();
+		}
+
 	}
 
 	@Override
 	public E take() throws InterruptedException {
-		// TODO 
-		return null;
+		try {
+			monitor.lock();
+			while (queue.isEmpty()) {
+				consumerWaitingCondition.await();
+			}
+			E res = queue.poll();
+			producerWaitingCondition.signal();
+			return res;
+			
+		} finally {
+			monitor.unlock();
+		}
 	}
 
 	@Override
 	public E poll(long timeout, TimeUnit unit) throws InterruptedException {
-		// TODO 
-		return null;
+		try {
+			monitor.lock();
+			while (queue.isEmpty()) {
+				if(!consumerWaitingCondition.await(timeout, unit)) {
+					return null;
+				}
+			}
+			E res = queue.poll();
+			producerWaitingCondition.signal();
+			return res;
+			
+		} finally {
+			monitor.unlock();
+		}
 	}
 
 	@Override
 	public int remainingCapacity() {
-		// TODO 
+		
 		return 0;
 	}
 
 	@Override
 	public boolean remove(Object o) {
-		// TODO 
-		return false;
+		try {
+			monitor.lock();
+			
+			boolean res = queue.remove(o);
+			if (res) {
+				producerWaitingCondition.signal();
+			}
+			
+			return res;
+			
+		} finally {
+			monitor.unlock();
+		}
 	}
 
 	@Override
 	public boolean contains(Object o) {
-		// TODO 
+		
 		return false;
 	}
 
